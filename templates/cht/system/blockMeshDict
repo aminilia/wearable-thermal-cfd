@@ -1,0 +1,68 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Heated block on the bottom wall of a thin 2D air channel (mm).
+//
+//   8 ----------- 9 ------------- 10 ----------------- 11   y = H   (top wall)
+//   |    B4       |      B5        |        B6          |
+//   4 ----------- 5 ============== 6 ------------------ 7   y = hb
+//   |    B1       |  B2 (heater)   |        B3          |
+//   0 ----------- 1 ============== 2 ------------------ 3   y = 0   (bottom wall)
+//  x=0           x1               x2                   x3
+//
+// Double-brace placeholders are filled in by coolchan/case.py
+
+convertToMeters 0.001;
+
+x1 {{x1}};  x2 {{x2}};  x3 {{x3}};
+hb {{hb_mm}};  H {{H_mm}};  dz {{dz_mm}};
+
+vertices
+(
+    (0 0 0)     ($x1 0 0)     ($x2 0 0)     ($x3 0 0)       // 0-3
+    (0 $hb 0)   ($x1 $hb 0)   ($x2 $hb 0)   ($x3 $hb 0)     // 4-7
+    (0 $H 0)    ($x1 $H 0)    ($x2 $H 0)    ($x3 $H 0)      // 8-11
+    (0 0 $dz)   ($x1 0 $dz)   ($x2 0 $dz)   ($x3 0 $dz)     // 12-15
+    (0 $hb $dz) ($x1 $hb $dz) ($x2 $hb $dz) ($x3 $hb $dz)   // 16-19
+    (0 $H $dz)  ($x1 $H $dz)  ($x2 $H $dz)  ($x3 $H $dz)    // 20-23
+);
+
+blocks
+(
+    hex (0 1 5 4 12 13 17 16)   air    ({{nxUp}}   {{nyB}}   1) simpleGrading (1 1 1)
+    hex (1 2 6 5 13 14 18 17)   heater ({{nxB}}    {{nyB}}   1) simpleGrading (1 1 1)
+    hex (2 3 7 6 14 15 19 18)   air    ({{nxDown}} {{nyB}}   1) simpleGrading (1 1 1)
+    hex (4 5 9 8 16 17 21 20)   air    ({{nxUp}}   {{nyGap}} 1) simpleGrading (1 1 1)
+    hex (5 6 10 9 17 18 22 21)  air    ({{nxB}}    {{nyGap}} 1) simpleGrading (1 1 1)
+    hex (6 7 11 10 18 19 23 22) air    ({{nxDown}} {{nyGap}} 1) simpleGrading (1 1 1)
+);
+
+boundary
+(
+    inlet      { type patch; faces ((0 12 16 4) (4 16 20 8)); }
+    outlet     { type patch; faces ((3 7 19 15) (7 11 23 19)); }
+    bottomWall { type wall;  faces ((0 1 13 12) (1 2 14 13) (2 3 15 14)); }
+    topWall    { type wall;  faces ((8 20 21 9) (9 21 22 10) (10 22 23 11)); }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 4 5 1) (1 5 6 2) (2 6 7 3) (4 8 9 5) (5 9 10 6) (6 10 11 7)
+            (12 13 17 16) (13 14 18 17) (14 15 19 18)
+            (16 17 21 20) (17 18 22 21) (18 19 23 22)
+        );
+    }
+);
+
+// ************************************************************************* //

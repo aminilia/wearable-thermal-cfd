@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stage 2 conjugate heat transfer: mesh -> split regions -> solve.
+cd "${0%/*}" || exit 1
+set -e
+blockMesh                                   > log.blockMesh 2>&1
+splitMeshRegions -cellZones -overwrite      > log.splitMeshRegions 2>&1
+rm -rf 0 && cp -r 0.orig 0
+chtMultiRegionSimpleFoam                    > log.chtMultiRegionSimpleFoam 2>&1
+echo "done: $(pwd)"

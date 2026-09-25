@@ -1,0 +1,36 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     chtMultiRegionSimpleFoam;
+
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         {{nIter}};
+deltaT          1;
+
+writeControl    timeStep;
+writeInterval   {{writeInterval}};
+purgeWrite      2;          // keep the last two iterates -> iterative-convergence check
+writeFormat     ascii;
+writePrecision  10;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+// No function objects: all post-processing is done in Python (coolchan/foamio.py)
+// directly from the field and polyMesh files, so the same analysis code runs
+// unchanged on any OpenFOAM version.
+
+// ************************************************************************* //

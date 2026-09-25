@@ -1,0 +1,28 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant/heater";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Uniform volumetric heat generation in the block [W/m^3].
+// q''' = Q / (L_block * h_block * W_depth), computed in coolchan/case.py
+heatSource
+{
+    type            scalarSemiImplicitSource;
+    active          true;
+    selectionMode   all;
+    volumeMode      specific;
+    injectionRateSuSp
+    {
+        h           ({{qvol}} 0);
+    }
+}
+
+// ************************************************************************* //

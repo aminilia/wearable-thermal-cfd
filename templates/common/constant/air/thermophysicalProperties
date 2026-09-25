@@ -1,0 +1,36 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant/air";
+    object      thermophysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Dry air at ~300 K with constant properties. rhoConst + const transport make
+// the energy equation linear in T and one-way coupled to the flow, which is
+// what lets us compare against constant-property textbook solutions.
+thermoType
+{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          hConst;
+    equationOfState rhoConst;
+    specie          specie;
+    energy          sensibleEnthalpy;
+}
+
+mixture
+{
+    specie          { molWeight 28.96; }
+    equationOfState { rho {{rho_air}}; }
+    thermodynamics  { Cp {{cp_air}}; Hf 0; }
+    transport       { mu {{mu_air}}; Pr {{Pr_air}}; }
+}
+
+// ************************************************************************* //

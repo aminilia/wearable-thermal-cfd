@@ -1,0 +1,26 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0/air";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform ({{U_in}} 0 0);
+
+boundaryField
+{
+    inlet           { type fixedValue; value uniform ({{U_in}} 0 0); }
+    outlet          { type inletOutlet; inletValue uniform (0 0 0); value $internalField; }
+    ".*Wall"        { type noSlip; }
+    air_to_heater   { type noSlip; }
+    frontAndBack    { type empty; }
+}
+
+// ************************************************************************* //

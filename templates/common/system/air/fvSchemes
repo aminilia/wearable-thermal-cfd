@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system/air";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes      { default steadyState; }
+
+gradSchemes
+{
+    default         Gauss linear;
+    // limit the enthalpy gradient so linearUpwind cannot create new extrema
+    // (without it T undershoots T_in by ~0.5 K at the block's leading corner)
+    grad(h)         cellLimited Gauss linear 1;
+}
+
+divSchemes
+{
+    default         none;
+    // second-order upwind-biased convection (formal order 2 for the GCI study)
+    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,h)      bounded Gauss linearUpwind grad(h);
+    div(phi,K)      bounded Gauss linear;
+    div(phi,Ekp)    bounded Gauss linear;
+    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
+}
+
+laplacianSchemes { default Gauss linear corrected; }
+interpolationSchemes { default linear; }
+snGradSchemes   { default corrected; }
+
+// ************************************************************************* //

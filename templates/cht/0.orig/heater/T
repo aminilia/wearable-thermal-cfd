@@ -1,0 +1,30 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0/heater";
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];
+internalField   uniform {{T_in}};
+
+boundaryField
+{
+    bottomWall      { type zeroGradient; }      // adiabatic mount
+    heater_to_air
+    {
+        type            compressible::turbulentTemperatureCoupledBaffleMixed;
+        Tnbr            T;
+        kappaMethod     solidThermo;
+        value           $internalField;
+    }
+    frontAndBack    { type empty; }
+}
+
+// ************************************************************************* //

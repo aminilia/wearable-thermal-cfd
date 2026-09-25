@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  openfoam-smoke:
+    # Runs the coarse Stage-1 channel and the coarse Stage-2 CHT case inside the
+    # official openfoam.com image and checks them against the analytical values.
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    timeout-minutes: 30
+    env:
+      COOLCHAN_DOCKER_IMAGE: opencfd/openfoam-default:2406
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Pull OpenFOAM image
+        run: docker pull "$COOLCHAN_DOCKER_IMAGE"
+      - name: Run coarse cases and verify
+        run: python scripts/ci_check.py
+      - name: Upload logs and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openfoam-smoke
+          path: |
+            runs/ci/ci_report.json
+            runs/ci/*/log.*

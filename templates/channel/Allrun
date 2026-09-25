@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stage 1 channel: mesh -> solve -> write cell centres.  Run from anywhere.
+cd "${0%/*}" || exit 1
+set -e
+blockMesh                                  > log.blockMesh 2>&1
+mkdir -p constant/air
+rm -rf constant/air/polyMesh && mv constant/polyMesh constant/air/
+chtMultiRegionSimpleFoam                   > log.chtMultiRegionSimpleFoam 2>&1
+echo "done: $(pwd)"
