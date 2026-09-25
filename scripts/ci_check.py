@@ -17,6 +17,8 @@ from coolchan.case import ChannelParams, ChtParams, build_channel, build_cht  # 
 from coolchan.cht import analyse_cht  # noqa: E402
 from coolchan.runner import run_many  # noqa: E402
 from coolchan.verification import NU_FD, FRE_FD, analyse_channel  # noqa: E402
+from coolchan.bfs import BFSParams, build_bfs, reattachment, write_inlet_velocity  # noqa: E402
+from coolchan.runner import run_case  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 RUNS = REPO / "runs" / "ci"
@@ -36,6 +38,14 @@ def main() -> int:
             print(k, v)
         return 1
 
+    # Phase 1 smoke test: Gartling BFS on the coarse (20 cells/S) mesh
+    gp = BFSParams(Re=800, S_mm=5.0, h_mm=5.0, Lin_S=0, Ld_S=60, n_S=20, nIter=20000)
+    gd = build_bfs(RUNS / "gartling", gp)
+    run_case(gd, "Allmesh")
+    write_inlet_velocity(gd, gp)
+    run_case(gd, "Allsolve")
+    bf = reattachment(gd, gp)
+
     ch = analyse_channel(RUNS / "channel", CH)
     ht = analyse_cht(RUNS / "cht", CHT)
     checks = {
@@ -46,6 +56,10 @@ def main() -> int:
         "cht: energy balance < 0.5 %": (abs(ht.energy_err), 5e-3),
         "cht: T_max within 1 K of reference": (abs(ht.T_max_C - REF["T_max_C"]), 1.0),
         "cht: iterative change of T_max < 1 mK": (ht.dTmax_iter, 1e-3),
+        # coarse-mesh values are 3.2 % / 3.8 % / 0.8 % below Gartling (1990)
+        "bfs: x1 within 5 % of Gartling 12.2": (abs(bf["x1"] / 12.2 - 1), 0.05),
+        "bfs: x4 within 5 % of Gartling 9.7": (abs(bf["x4"] / 9.7 - 1), 0.05),
+        "bfs: x5 within 5 % of Gartling 21.0": (abs(bf["x5"] / 21.0 - 1), 0.05),
     }
     ok = True
     for name, (val, tol) in checks.items():
@@ -55,6 +69,7 @@ def main() -> int:
     report = dict(channel=dict(Nu_fd=ch.Nu_fd, fRe=ch.fRe, u_max_err=ch.u_max_err,
                                energy_err=ch.energy_err),
                   cht={k: float(v) for k, v in ht.as_dict().items()},
+                  bfs_gartling=bf,
                   passed=bool(ok))
     RUNS.mkdir(parents=True, exist_ok=True)
     (RUNS / "ci_report.json").write_text(json.dumps(report, indent=2))

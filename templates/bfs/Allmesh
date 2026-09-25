@@ -1,0 +1,6 @@
+#!/bin/sh
+# Backward-facing step: mesh only (Python then writes the exact inlet profile)
+cd "${0%/*}" || exit 1
+set -e
+blockMesh > log.blockMesh 2>&1
+checkMesh > log.checkMesh 2>&1

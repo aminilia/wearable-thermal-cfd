@@ -1,0 +1,14 @@
+#!/bin/sh
+# Backward-facing step: solve serially or in parallel
+cd "${0%/*}" || exit 1
+set -e
+NP={{nProcs}}
+if [ "$NP" -gt 1 ]; then
+    decomposePar -force > log.decomposePar 2>&1
+    mpirun --allow-run-as-root --oversubscribe -np $NP simpleFoam -parallel > log.simpleFoam 2>&1
+    reconstructPar > log.reconstructPar 2>&1
+    rm -rf processor*
+else
+    simpleFoam > log.simpleFoam 2>&1
+fi
+echo "done: $(pwd)"

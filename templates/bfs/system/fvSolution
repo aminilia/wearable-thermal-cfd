@@ -1,0 +1,44 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-9;
+        relTol          0.01;
+    }
+    U
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-11;
+        relTol          0.05;
+    }
+}
+
+SIMPLE
+{
+    consistent      yes;        // SIMPLEC
+    nNonOrthogonalCorrectors 0;
+    residualControl { p 1e-7; U 1e-8; }   // x1 changes < 1e-4 S between the last two writes at this level
+}
+
+relaxationFactors
+{
+    equations { U 0.9; }
+}
+
+// ************************************************************************* //

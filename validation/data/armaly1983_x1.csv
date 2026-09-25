@@ -1,0 +1,17 @@
+# Armaly, Durst, Pereira & Schonung (1983), "Experimental and theoretical investigation of
+# backward-facing step flow", J. Fluid Mech. 127, 473-496. LDA in air, ER = 1.942,
+# S = 4.9 mm, h = 5.2 mm, spanwise aspect ratio 18 (downstream), inlet channel 200 mm long.
+# Primary (lower-wall) reattachment length measured on the channel centre-plane.
+# Values digitised from Armaly et al.'s reattachment-length figure, as tabulated in the Feel++ BFS benchmark
+# (docs.feelpp.org, "Laminar, Isothermal Backward Facing Step Benchmark", Table 3).
+# Re_S = U_mean * S / nu  (convert: Re_2h = Re_S * 2h/S = 2.1224 * Re_S)
+# Digitisation uncertainty is not given by the source; we assume +/-0.25 S (about 2-3 %),
+# which is typical for manual digitisation of a log-scale figure. See validation/README.md.
+Re_S,x1_over_S
+34.04,2.48
+47.87,3.05
+81.92,4.36
+141.49,6.73
+164.89,7.97
+234.04,9.55
+297.87,11.47

@@ -1,0 +1,17 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+transportModel  Newtonian;
+nu              {{nu}};     // air at 300 K, same as the CHT model
+
+// ************************************************************************* //

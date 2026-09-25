@@ -1,0 +1,9 @@
+{
+  "source": "Gartling, D.K. (1990) 'A test problem for outflow boundary conditions - flow over a backward-facing step', Int. J. Numer. Meth. Fluids 11, 953-967. Values in step heights as quoted by Barkley, Gomes & Henderson (2002) J. Fluid Mech. 473, 167-190 (Table comparison at Re_Barkley = 600, identical to Gartling Re = 800).",
+  "type": "numerical benchmark (code-to-code)",
+  "geometry": "expansion ratio 2 (S = h), parabolic inlet profile imposed at the step, outlet 30 channel heights (60 S) downstream",
+  "Re_definition": "U_mean * 2h / nu = 800",
+  "x1_over_S": 12.2,
+  "x4_over_S": 9.7,
+  "x5_over_S": 21.0
+}

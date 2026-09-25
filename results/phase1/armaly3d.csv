@@ -1,0 +1,3 @@
+Re_S,Re_2h,x1_3d_fine,x1_3d_extrap,p_3d,gci_3d_pct,delta_fine,delta_extrap,p_delta,gci_delta_pct,delta_oscillatory,cells_fine
+141.49,300.31,6.6372,6.6957,1.9152,1.1015,0.053202,0.042539,1.7254,25.053,False,640800
+297.87,632.21,12.148,12.356,2.0901,2.1389,1.6941,1.3119,0.25483,28.202,False,640800

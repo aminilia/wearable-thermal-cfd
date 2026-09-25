@@ -1,0 +1,26 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes      { default steadyState; }
+gradSchemes     { default Gauss linear; }
+divSchemes
+{
+    default         none;
+    div(phi,U)      bounded Gauss linearUpwind grad(U);     // same as the CHT model
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+}
+laplacianSchemes { default Gauss linear corrected; }
+interpolationSchemes { default linear; }
+snGradSchemes   { default corrected; }
+
+// ************************************************************************* //

@@ -1,0 +1,26 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  wearable-cooling-cfd  |  OpenFOAM (openfoam.com, v1912+)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];     // kinematic pressure
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet           { type zeroGradient; }
+    outlet          { type fixedValue; value uniform 0; }
+    ".*Wall"        { type zeroGradient; }
+    midPlane        { type symmetryPlane; }
+    frontAndBack    { type empty; }
+}
+
+// ************************************************************************* //

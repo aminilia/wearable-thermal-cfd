@@ -13,6 +13,7 @@ A 2D conjugate heat-transfer (CHT) model, built in OpenFOAM, of a heated alumini
 | 1. Verification | The solver reproduces textbook laminar channel flow and heat transfer | Richardson-extrapolated Nu = **8.2353** vs 140/17 = 8.2353; f·Re = **96.001** vs 96; observed order **p = 1.98 / 1.99** |
 | 2. Conjugate heat transfer | Block and air are coupled, and the solution is mesh-independent and conserves energy | T<sub>max</sub> GCI **0.08 %** on the design mesh; energy imbalance **≤ 0.07 %** |
 | 3. Design study | LHS → 36 CFD runs → surrogate → Monte Carlo | Physics-informed GP: hold-out RMSE **0.12 K**; 20 000-sample MC at 1 681 design points |
+| **Phase 1. Validation** ([details](validation/README.md)) | The separated flow behind the block is checked against a benchmark and against experiment, with ASME V&V 20 uncertainty accounting | Gartling benchmark within **0.2 %**; Armaly et al. experiment matched within u<sub>val</sub> for Re ≲ 500; above that, a **−7 % 2D model-form error**, which 3D runs attribute to sidewall effects |
 
 ---
 
@@ -23,6 +24,7 @@ templates/            OpenFOAM case files with {{placeholders}}
   common/             region dictionaries shared by all cases (thermo, schemes, solvers)
   channel/            Stage 1: parallel-plate channel (blockMesh, BCs, Allrun)
   cht/                Stage 2/3: heated block + air, split into two regions (Allrun)
+  bfs/                Phase 1: backward-facing step, 2D or 3D half-span (Allmesh/Allsolve)
 coolchan/             Python package
   case.py             parameter dataclasses -> rendered case directories
   runner.py           run cases natively or in Docker, in a process pool
@@ -30,11 +32,14 @@ coolchan/             Python package
   verification.py     analytical solutions, channel post-processing, 3-grid GCI
   cht.py              CHT outputs: T_max, T_out, Δp, fan power, energy balance
   surrogate.py        LHS, three surrogates, leave-one-out CV, Monte Carlo
+  bfs.py              BFS geometry, exact channel/duct inlet profiles, reattachment lengths
 scripts/
   stage1_verification.py
   stage2_cht.py
   stage3_design.py    run | fit | mc | all
+  phase1_validation.py  gartling | armaly2d | armaly3d | report
   ci_check.py         coarse smoke test used by GitHub Actions
+validation/           Phase 1 write-up and reference data with provenance
 results/              committed CSV / JSON / Markdown tables behind every number here
 docs/figures/         figures used in this README
 tests/                pytest unit tests (no OpenFOAM needed)
@@ -53,6 +58,7 @@ python scripts/stage1_verification.py       # ~7 min on 2 cores
 python scripts/stage2_cht.py                # ~20 min (the fine mesh dominates)
 python scripts/stage3_design.py all         # ~35 min for 36 cases on 2 cores
 python scripts/stage3_design.py fit mc      # re-analyse the cached CFD in ~2 min
+python scripts/phase1_validation.py         # ~2.5 h on 2 cores (3D runs up to 641 k cells)
 ```
 
 Each case is self-contained, so you can also run it by hand: `cd runs/stage2/medium && ./Allrun`.
@@ -197,9 +203,27 @@ Because T is linear in Q and T<sub>in</sub>, the model can also compute exactly 
 
 ---
 
+## Phase 1: Validation against experiment
+
+The recirculation zone behind the block is a backward-facing-step flow. Phase 1 validates that flow physics in three steps:
+
+* **against a numerical benchmark:** Gartling 1990, Re = 800;
+* **against experiment:** Armaly et al. 1983, laminar air flow at 7 Reynolds numbers;
+* **with 3D sidewall runs:** to find out where the 2D model stops being adequate.
+
+Full write-up, data provenance and uncertainty assumptions: [**validation/README.md**](validation/README.md).
+
+<p align="center"><img src="docs/figures/phase1_armaly_validation.png" width="95%"></p>
+
+* **Benchmark:** all three separation and reattachment points converge at second order and extrapolate to within **0.2 %** of Gartling (1990).
+* **Experiment:** the 2D laminar model agrees with Armaly et al. within the V&V 20 validation uncertainty up to Re ≈ 500 (5 of 6 points). The flagged point at Re = 350 is out of line with its neighbours. At Re = 632, a **−0.80 S (−7 %) model-form error** is detected.
+* **3D attribution:** runs with the real sidewalls (up to 641 k cells, three meshes) show the sidewalls change the result by only +0.04 S at Re = 300 but lengthen the bubble by **+1.3 to +1.7 S** at Re = 632. The experiment falls between the 2D and 3D predictions. Our leading hypothesis is the inlet condition: the experiment's sidewall boundary layers were probably not fully developed.
+* **Consequence for the design model:** above Re ≈ 400–500, 2D slices carry an error of order 10 % in the recirculation length. The wearable channel's aspect ratio is smaller than the experiment's, so the effect should be at least as strong there. This is the quantitative case for Phase 2 (3D).
+* **Still open:** heat-transfer validation, for example against Aung (1983) on laminar heat transfer behind a step. Those data are not openly available.
+
 ## Verification, validation and limitations
 
-* **Verification ≠ validation.** Stage 1 is *code verification* (the equations are solved correctly), and Stage 2's GCI is *solution verification* (the mesh is fine enough). Neither shows the *model* matches reality. That needs measured data. The natural next step is to compare against published experiments on heated protruding blocks in channels, or against a bench test with a thermocouple and a small fan.
+* **Verification vs validation.** Stage 1 is *code verification* (the equations are solved correctly), and Stage 2's GCI is *solution verification* (the mesh is fine enough). Phase 1 adds *validation* of the separated-flow physics against experiment. Heat transfer has not yet been validated against measurements.
 * **One DOE case (train_05: U = 2.8 m/s, gap = 1.67 mm) did not converge to a steady state.** Its residuals stall at about 3 × 10⁻², which suggests the separated flow behind the block wants to be unsteady there. Its T<sub>max</sub> is iteratively stable to 10⁻⁴ K and its energy balance closes to 0.45 %, so it is kept in the fit. A transient `chtMultiRegionFoam` check would settle it.
 * **The model is 2D.** It ignores spanwise leakage around the block and side-wall effects, and all heat goes to the air through adiabatic walls. This is conservative for T<sub>max</sub>, but real headsets also conduct heat into the shell, which is exactly where the skin-contact limit applies. A 3D model with a housing region and a skin-side contact resistance is the realistic extension.
 * **Fan power is ideal** (Δp × flow). A real fan curve and efficiency (typically 10–30 % at this scale) should be applied before comparing designs on power.
@@ -210,12 +234,13 @@ Because T is linear in Q and T<sub>in</sub>, the model can also compute exactly 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) has two jobs:
 
 1. **unit-tests**: runs pytest on the template renderer, the field parser, the GCI algorithm (checked against synthetic data with a known order), the LHS stratification, the surrogates, and the Monte Carlo allowable-load identity.
-2. **openfoam-smoke**: pulls `opencfd/openfoam-default:2406` and runs the coarse channel and coarse CHT cases through the same Python runner (`COOLCHAN_DOCKER_IMAGE`). It fails the build if any of these checks fail:
+2. **openfoam-smoke**: pulls `opencfd/openfoam-default:2406` and runs the coarse channel, coarse CHT and coarse Gartling backward-facing-step cases through the same Python runner (`COOLCHAN_DOCKER_IMAGE`). It fails the build if any of these checks fail:
    * Nu is not within 1.5 % of 140/17
    * f·Re is not within 3 % of 96
    * u(y) is not within 3 % of Poiseuille
    * the energy balance does not close
    * the CHT T<sub>max</sub> drifts more than 1 K from the committed reference
+   * the step-flow separation and reattachment points are not within 5 % of Gartling (1990)
 
    Logs and a JSON report are uploaded as build artifacts.
 

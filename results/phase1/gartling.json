@@ -1,0 +1,75 @@
+{
+  "levels": [
+    {
+      "n_S": 20,
+      "h_S": 0.05,
+      "x1": 11.807016639300628,
+      "x4": 9.333484962294277,
+      "x5": 20.83415481591149,
+      "max_residual": 1.444706052e-09,
+      "dx1_iter": NaN,
+      "n_cells": 24000,
+      "iterations": 1474
+    },
+    {
+      "n_S": 40,
+      "h_S": 0.025,
+      "x1": 12.094966378923571,
+      "x4": 9.61151972089617,
+      "x5": 20.932408570643428,
+      "max_residual": 1.761935957e-09,
+      "dx1_iter": 0.0008590045327601104,
+      "n_cells": 96000,
+      "iterations": 3479
+    },
+    {
+      "n_S": 80,
+      "h_S": 0.0125,
+      "x1": 12.16893449973996,
+      "x4": 9.683176875078985,
+      "x5": 20.952590550507477,
+      "max_residual": 3.648435237e-09,
+      "dx1_iter": 3.5492423803518136e-05,
+      "n_cells": 384000,
+      "iterations": 10000
+    }
+  ],
+  "reference": {
+    "source": "Gartling, D.K. (1990) 'A test problem for outflow boundary conditions - flow over a backward-facing step', Int. J. Numer. Meth. Fluids 11, 953-967. Values in step heights as quoted by Barkley, Gomes & Henderson (2002) J. Fluid Mech. 473, 167-190 (Table comparison at Re_Barkley = 600, identical to Gartling Re = 800).",
+    "type": "numerical benchmark (code-to-code)",
+    "geometry": "expansion ratio 2 (S = h), parabolic inlet profile imposed at the step, outlet 30 channel heights (60 S) downstream",
+    "Re_definition": "U_mean * 2h / nu = 800",
+    "x1_over_S": 12.2,
+    "x4_over_S": 9.7,
+    "x5_over_S": 21.0
+  },
+  "gci": {
+    "x1": {
+      "fine": 12.16893449973996,
+      "p": 1.9608414882472223,
+      "extrap": 12.194503438453589,
+      "gci_fine_pct": 0.2626456194066864,
+      "ref": 12.2,
+      "fine_vs_ref_pct": -0.2546352480331082,
+      "extrap_vs_ref_pct": -0.04505378316729258
+    },
+    "x4": {
+      "fine": 9.683176875078985,
+      "p": 1.956082599087649,
+      "extrap": 9.708057228545792,
+      "gci_fine_pct": 0.32118014815520124,
+      "ref": 9.7,
+      "fine_vs_ref_pct": -0.17343427753623297,
+      "extrap_vs_ref_pct": 0.08306421181230039
+    },
+    "x5": {
+      "fine": 20.952590550507477,
+      "p": 2.283444829881879,
+      "extrap": 20.957807702441347,
+      "gci_fine_pct": 0.031124742793117326,
+      "ref": 21.0,
+      "fine_vs_ref_pct": -0.22575928329773287,
+      "extrap_vs_ref_pct": -0.20091570266025371
+    }
+  }
+}
