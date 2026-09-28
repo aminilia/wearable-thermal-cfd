@@ -1,6 +1,6 @@
 # Thermal design of a wearable: forced-air cooling, skin temperature, V&V
 
-[![CI](https://github.com/aminilia/wearable-cooling-cfd/actions/workflows/ci.yml/badge.svg)](https://github.com/aminilia/wearable-cooling-cfd/actions/workflows/ci.yml)
+[![CI](https://github.com/aminilia/wearable-thermal-cfd/actions/workflows/ci.yml/badge.svg)](https://github.com/aminilia/wearable-thermal-cfd/actions/workflows/ci.yml)
 
 An OpenFOAM conjugate heat-transfer (CHT) model of a heat source (standing in for a battery or SoC) in the thin air channel of a headset arm, driven end to end from Python. It starts as a verified 2D model and grows into a 3D model of the device on the wearer's skin. It answers one design question:
 
