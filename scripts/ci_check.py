@@ -19,6 +19,8 @@ from coolchan.runner import run_many  # noqa: E402
 from coolchan.verification import NU_FD, FRE_FD, analyse_channel  # noqa: E402
 from coolchan.bfs import BFSParams, build_bfs, reattachment, write_inlet_velocity  # noqa: E402
 from coolchan.runner import run_case  # noqa: E402
+from coolchan.bioheat import ColumnParams, build_column, column_profile, reference  # noqa: E402
+import numpy as np  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 RUNS = REPO / "runs" / "ci"
@@ -46,6 +48,17 @@ def main() -> int:
     run_case(gd, "Allsolve")
     bf = reattachment(gd, gp)
 
+    # Phase 2 smoke test: 1D bioheat columns vs semi-analytic (checks the Pennes source,
+    # contact layer, radiation BC and the enthalpy reference on this OpenFOAM release)
+    col_err = {}
+    for kind, kw in (("bare", {}), ("device", dict(q_top=300.0, R_contact=5e-3))):
+        cp_ = ColumnParams(kind=kind, **kw)
+        cd = build_column(RUNS / f"column_{kind}", cp_)
+        run_case(cd)
+        y, T, _ = column_profile(cd, cp_)
+        ref = reference(cp_)
+        col_err[kind] = float(np.abs(T - np.interp(y, ref["y"], ref["T"])).max())
+
     ch = analyse_channel(RUNS / "channel", CH)
     ht = analyse_cht(RUNS / "cht", CHT)
     checks = {
@@ -60,6 +73,8 @@ def main() -> int:
         "bfs: x1 within 5 % of Gartling 12.2": (abs(bf["x1"] / 12.2 - 1), 0.05),
         "bfs: x4 within 5 % of Gartling 9.7": (abs(bf["x4"] / 9.7 - 1), 0.05),
         "bfs: x5 within 5 % of Gartling 21.0": (abs(bf["x5"] / 21.0 - 1), 0.05),
+        "bioheat bare column: max |error| < 1 mK": (col_err["bare"], 1e-3),
+        "bioheat device column: max |error| < 1 mK": (col_err["device"], 1e-3),
     }
     ok = True
     for name, (val, tol) in checks.items():
@@ -69,7 +84,7 @@ def main() -> int:
     report = dict(channel=dict(Nu_fd=ch.Nu_fd, fRe=ch.fRe, u_max_err=ch.u_max_err,
                                energy_err=ch.energy_err),
                   cht={k: float(v) for k, v in ht.as_dict().items()},
-                  bfs_gartling=bf,
+                  bfs_gartling=bf, bioheat_column_err=col_err,
                   passed=bool(ok))
     RUNS.mkdir(parents=True, exist_ok=True)
     (RUNS / "ci_report.json").write_text(json.dumps(report, indent=2))

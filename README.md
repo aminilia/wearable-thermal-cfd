@@ -1,12 +1,18 @@
-# Forced-air cooling of a heat source in a thin wearable channel
+# Thermal design of a wearable: forced-air cooling, skin temperature, V&V
 
-[![CI](https://github.com/<your-user>/wearable-cooling-cfd/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-user>/wearable-cooling-cfd/actions/workflows/ci.yml)
+[![CI](https://github.com/aminilia/wearable-cooling-cfd/actions/workflows/ci.yml/badge.svg)](https://github.com/aminilia/wearable-cooling-cfd/actions/workflows/ci.yml)
 
-A 2D conjugate heat-transfer (CHT) model, built in OpenFOAM, of a heated aluminium block (standing in for a battery or SoC) inside the thin air channel of a headset arm. It is driven end to end from Python. The model answers one design question:
+An OpenFOAM conjugate heat-transfer (CHT) model of a heat source (standing in for a battery or SoC) in the thin air channel of a headset arm, driven end to end from Python. It starts as a verified 2D model and grows into a 3D model of the device on the wearer's skin. It answers one design question:
 
-> **What channel gap and airflow keep the hottest point below the 43 °C skin-contact comfort limit, and how confident can we be?**
+> **What channel gap and airflow keep the wearer's skin below the 43 °C comfort limit, and how confident can we be?**
 
-**Short answer (for 0.5 W, 25 °C inlet air):** only narrow gaps with fast air are safe. With a 1.5 mm gap (0.5 mm of clearance above the 1 mm block), you need **U ≥ 1.75 m/s** to keep the probability of exceeding 43 °C at or below 1 %. That costs about **6 mW of ideal fan power**. The "obvious" starting design (3 mm gap, 1.5 m/s) runs at **48.9 °C** and fails 98 % of the time. Across the whole design space, the load this channel can safely remove ranges from **0.16 W to 0.62 W**, so dissipating 1–3 W in a channel this thin needs a heat-spreading path to the housing, not forced air alone.
+**Short answer (0.5 W, 25 °C room):** with the heater mounted on the skin-side wall, **no fan setting we tested is enough**.
+
+* **The 3D model with skin fails every fan setting tested.** It adds the plastic housing, the housing–skin contact and four layers of perfused tissue. The skin peaks at **47.6 °C** in the nominal design (3 mm gap, 1.5 m/s) and still reaches **45.0 °C** at 3 m/s.
+* **The 2D model's pick fails too.** The 2D surrogate study (Stage 3) recommended a 1.5 mm gap at 1.75 m/s. In 3D that design reaches **45.2 °C at the skin**, because air bypasses the heater and heat conducts straight through the wall into the skin.
+* **Heater placement fixes the skin.** Moving the heater to the outer wall brings the skin peak down to **34.6 °C**. The outer shell then reaches 56.6 °C, which turns it into a touch-temperature problem instead.
+
+The 2D stages remain a verified and validated foundation. See [Phase 2](docs/phase2.md) for why 2D and a chip-temperature criterion are not enough.
 
 | Stage | What it shows | Key numbers |
 |---|---|---|
@@ -15,6 +21,7 @@ A 2D conjugate heat-transfer (CHT) model, built in OpenFOAM, of a heated alumini
 | 3. Design study | LHS → 36 CFD runs → surrogate → Monte Carlo | Physics-informed GP: hold-out RMSE **0.12 K**; 20 000-sample MC at 1 681 design points |
 | **Phase 1. Validation** ([details](validation/README.md)) | The separated flow behind the block is checked against a benchmark and against experiment, with ASME V&V 20 uncertainty accounting | Gartling benchmark within **0.2 %**; Armaly et al. experiment matched within u<sub>val</sub> for Re ≲ 500; above that, a **−7 % 2D model-form error**, which 3D runs attribute to sidewall effects |
 
+| **Phase 2. 3D device + skin** ([details](docs/phase2.md)) | 3D temple arm (7 regions): air, heater, housing, contact resistance, 4-layer Pennes bioheat tissue, and room convection plus radiation | Bioheat verified against a semi-analytic solution to **≤ 0.3 mK**; skin-peak GCI **±0.4 K**; energy closed to **0.2 %**; Stage 3's 2D pick reaches **45.2 °C at the skin** in 3D |
 ---
 
 ## Repository layout
@@ -33,13 +40,18 @@ coolchan/             Python package
   cht.py              CHT outputs: T_max, T_out, Δp, fan power, energy balance
   surrogate.py        LHS, three surrogates, leave-one-out CV, Monte Carlo
   bfs.py              BFS geometry, exact channel/duct inlet profiles, reattachment lengths
+  lattice.py          tensor-product multi-block mesher for layered 3D assemblies
+  device3d.py         Phase 2 device + skin model: geometry, regions, Pennes source, analysis
+  bioheat.py          1D bioheat columns and their semi-analytic reference solution
 scripts/
   stage1_verification.py
   stage2_cht.py
   stage3_design.py    run | fit | mc | all
   phase1_validation.py  gartling | armaly2d | armaly3d | report
+  phase2_device.py    column | mesh | cases | report
   ci_check.py         coarse smoke test used by GitHub Actions
 validation/           Phase 1 write-up and reference data with provenance
+docs/phase2.md        Phase 2 write-up
 results/              committed CSV / JSON / Markdown tables behind every number here
 docs/figures/         figures used in this README
 tests/                pytest unit tests (no OpenFOAM needed)
@@ -59,6 +71,7 @@ python scripts/stage2_cht.py                # ~20 min (the fine mesh dominates)
 python scripts/stage3_design.py all         # ~35 min for 36 cases on 2 cores
 python scripts/stage3_design.py fit mc      # re-analyse the cached CFD in ~2 min
 python scripts/phase1_validation.py         # ~2.5 h on 2 cores (3D runs up to 641 k cells)
+python scripts/phase2_device.py             # ~1.2 h on 2 cores (3D device + skin, up to 430 k cells)
 ```
 
 Each case is self-contained, so you can also run it by hand: `cd runs/stage2/medium && ./Allrun`.
@@ -71,7 +84,7 @@ Each case is self-contained, so you can also run it by hand: `cd runs/stage2/med
  y=H  +---------------------------------------------------+  top wall   (adiabatic, no-slip)
       |  air, laminar, constant properties                |
 inlet |            +==================+                   |  outlet (p fixed)
-U, 25°C   y=1 mm   |  Al block, q'''  |                   |
+U, 25°C   y=1 mm   |  block, q'''  |                   |
  y=0  +------------+==================+-------------------+  bottom wall (adiabatic)
       0           10                 30                  60   x [mm]
 ```
@@ -198,7 +211,7 @@ Because T is linear in Q and T<sub>in</sub>, the model can also compute exactly 
 
 1. **At 0.5 W, only 4.8 % of the explored space is safe (P ≤ 1 %).** All of it has a narrow gap and fast air.
 2. **The gap matters more than the fan.** At a fixed inlet velocity, halving the clearance over the block roughly doubles the local air speed and thins the thermal boundary layer. At 1 m/s, going from a 4 mm to a 1.5 mm gap lowers T<sub>max</sub> from 56.8 to 42.8 °C. Tripling the fan speed at a 4 mm gap only gets to 46.1 °C.
-3. **The lowest-fan-power safe design is H = 1.5 mm, U = 1.75 m/s** (≈ 6 mW ideal, 117 Pa). This sits on the edge of the explored range. Smaller gaps look attractive, but they would need new CFD runs before being trusted, and they are likely limited by manufacturing tolerance and acoustic noise.
+3. **The lowest-fan-power safe design is H = 1.5 mm, U = 1.75 m/s** (in the 2D chip-temperature model; **Phase 2 shows this design reaches 45.2 °C at the skin in 3D**) (≈ 6 mW ideal, 117 Pa). This sits on the edge of the explored range. Smaller gaps look attractive, but they would need new CFD runs before being trusted, and they are likely limited by manufacturing tolerance and acoustic noise.
 4. **Forced air alone tops out at about 0.6 W** in this geometry. Dissipating 1–3 W would need conduction into the housing or a larger wetted area (fins).
 
 ---
@@ -221,6 +234,24 @@ Full write-up, data provenance and uncertainty assumptions: [**validation/README
 * **Consequence for the design model:** above Re ≈ 400–500, 2D slices carry an error of order 10 % in the recirculation length. The wearable channel's aspect ratio is smaller than the experiment's, so the effect should be at least as strong there. This is the quantitative case for Phase 2 (3D).
 * **Still open:** heat-transfer validation, for example against Aung (1983) on laminar heat transfer behind a step. Those data are not openly available.
 
+## Phase 2: 3D device on the wearer's skin
+
+The model now includes the plastic housing, the housing–skin contact and four layers of perfused tissue (Pennes bioheat, 37 °C core). The pass/fail check moves from the chip to the **skin surface**. Full write-up: [**docs/phase2.md**](docs/phase2.md).
+
+<p align="center"><img src="docs/figures/phase2_skin_map.png" width="75%"></p>
+<p align="center"><img src="docs/figures/phase2_cases.png" width="100%"></p>
+
+* **Verification:**
+  * The bioheat implementation matches a semi-analytic multilayer solution to **≤ 0.3 mK**, and that reference is unit-tested against the closed form. The check covers the Pennes source, the contact resistance, and convection plus radiation.
+  * On the 3D mesh (82 k / 187 k / 430 k cells), the peak skin temperature is known to about **±0.4 K**.
+  * Every case closes its energy balance to 0.2 %.
+* **Findings:**
+  * **Stage 3's 2D pick fails in 3D.** The design it called safe (38 °C at the chip) reaches 45.2 °C at the skin.
+  * **The fan can't fix a heater on the skin-side wall.** At 3 m/s the skin still reaches 45.0 °C.
+  * **Moving the heater to the outer wall fixes the skin but not the shell.** The skin peak drops to 34.6 °C, but the outer shell rises to 56.6 °C.
+  * **Contact resistance matters little for the skin.** Across 0–5 × 10⁻³ m²K/W, the skin peak moves by only 1.6 K; the resistance mostly changes the housing temperature.
+  * **Idle, the device cools the skin.** With the fan on and no power, the device draws 0.2 W from the skin.
+
 ## Verification, validation and limitations
 
 * **Verification vs validation.** Stage 1 is *code verification* (the equations are solved correctly), and Stage 2's GCI is *solution verification* (the mesh is fine enough). Phase 1 adds *validation* of the separated-flow physics against experiment. Heat transfer has not yet been validated against measurements.
@@ -234,13 +265,14 @@ Full write-up, data provenance and uncertainty assumptions: [**validation/README
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) has two jobs:
 
 1. **unit-tests**: runs pytest on the template renderer, the field parser, the GCI algorithm (checked against synthetic data with a known order), the LHS stratification, the surrogates, and the Monte Carlo allowable-load identity.
-2. **openfoam-smoke**: pulls `opencfd/openfoam-default:2406` and runs the coarse channel, coarse CHT and coarse Gartling backward-facing-step cases through the same Python runner (`COOLCHAN_DOCKER_IMAGE`). It fails the build if any of these checks fail:
+2. **openfoam-smoke**: pulls `opencfd/openfoam-default:2406` and runs the coarse channel, coarse CHT, coarse Gartling backward-facing-step and 1D bioheat cases through the same Python runner (`COOLCHAN_DOCKER_IMAGE`). It fails the build if any of these checks fail:
    * Nu is not within 1.5 % of 140/17
    * f·Re is not within 3 % of 96
    * u(y) is not within 3 % of Poiseuille
    * the energy balance does not close
    * the CHT T<sub>max</sub> drifts more than 1 K from the committed reference
    * the step-flow separation and reattachment points are not within 5 % of Gartling (1990)
+   * the 1D bioheat columns (Pennes source, contact resistance, radiation) are not within 1 mK of the semi-analytic solution
 
    Logs and a JSON report are uploaded as build artifacts.
 
