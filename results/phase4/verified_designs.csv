@@ -1,0 +1,4 @@
+design,U_in,H_mm,spreader_mm,Q_max_coarse_W,Q_max_W,binding,fan_mW,spreader_mass_g,at_Qmax_skin_C,at_Qmax_touch_C,at_Qmax_component_C,at_Qmax_energy_err,at_Qmax_residual
+max_power,2.99676,2.4034,0.737359,1.14552,1.15125,touch,3.25788,1.43343,36.9163,47.8503,49.1321,-0.000965404,0.00261201
+quiet,0.359339,2.83255,0.733617,0.582829,0.585001,touch,0.0223186,1.42615,39.0201,47.9471,49.2281,-2.18123e-05,1.20317e-07
+balanced,1.91343,2.38512,0.510987,0.932413,0.935486,touch,0.948602,0.993359,36.9279,47.8689,49.1473,-0.000442009,9.92411e-08

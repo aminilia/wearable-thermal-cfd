@@ -109,6 +109,23 @@ boundary
 );
 """
 
+    def adjacency(self) -> set:
+        """Unordered pairs of different zones that share at least one block face."""
+        pairs = set()
+        for k in range(self.z.n):
+            for j in range(self.y.n):
+                for i in range(self.x.n):
+                    a = self.zone(i, j, k)
+                    if a is None:
+                        continue
+                    for di, dj, dk in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):
+                        ii, jj, kk = i + di, j + dj, k + dk
+                        if ii < self.x.n and jj < self.y.n and kk < self.z.n:
+                            b = self.zone(ii, jj, kk)
+                            if b is not None and b != a:
+                                pairs.add(frozenset((a, b)))
+        return pairs
+
     def n_cells(self) -> int:
         n = 0
         for k in range(self.z.n):

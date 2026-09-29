@@ -61,3 +61,39 @@ def test_reference_matches_closed_form_single_layer(monkeypatch):
     B = (-k * A * m * s - p.h_amb * (A * c + Tb - p.T_amb)) / (k * m * c + p.h_amb * s)
     T_top = Tb + A * c + B * s
     assert abs(ref["T_top"] - T_top) < 1e-6
+
+
+# ---------------------------------------------------------------- Phase 4 geometry
+@pytest.mark.parametrize("kw,expect", [
+    (dict(pad_mm=0.5), {"pad"}),
+    (dict(heater_side="outer", spreader_mm=0.3), set()),
+    (dict(heater_side="centre"), set()),
+])
+def test_phase4_architectures_have_expected_regions(kw, expect):
+    p = device3d.DeviceParams(**kw)
+    lat = p.lattice()
+    lat.block_mesh_dict()
+    zones = {lat.zone(i, j, k) for i in range(lat.x.n) for j in range(lat.y.n) for k in range(lat.z.n)}
+    assert expect <= zones
+    assert set(p.regions()[1]) >= expect
+    pairs = lat.adjacency()
+    if "pad" in expect:           # pad separates heater from the skin-side wall
+        assert frozenset(("heater", "housing")) not in pairs
+        assert frozenset(("heater", "pad")) in pairs and frozenset(("pad", "housing")) in pairs
+    if kw.get("spreader_mm"):      # spreader is part of the heater solid and lines the outer wall
+        assert "spreader" not in p.regions()[1]
+        assert frozenset(("heater", "housing")) in pairs
+        (x0, y0, _), (x1, y1, z1) = p.heater_box_m()
+        assert math.isclose((x1 - x0) * (y1 - y0) * z1 * 2, p.Lb_mm * p.hb_mm * p.Wb_mm * 1e-9)
+    if kw.get("heater_side") == "centre":
+        assert frozenset(("heater", "housing")) not in pairs
+
+
+def test_pad_only_under_skin_side_heater():
+    with pytest.raises(ValueError):
+        device3d.DeviceParams(heater_side="outer", pad_mm=0.5).lattice()
+
+
+def test_spreader_mass():
+    p = device3d.DeviceParams(spreader_mm=0.3)
+    assert math.isclose(p.spreader_mass_g, 2700 * 0.3e-3 * 60e-3 * 12e-3 * 1e3)

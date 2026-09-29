@@ -69,7 +69,13 @@ class DeviceParams:
     Wc_mm: float = 12.0          # channel internal width (full)
     t_mm: float = 1.0            # housing wall thickness
     margin_mm: float = 10.0      # tissue beyond the housing footprint
-    heater_side: str = "skin"    # "skin": on the skin-side housing wall; "outer": on the outer wall
+    heater_side: str = "skin"    # "skin": on the skin-side wall; "outer": on the outer wall;
+                                 # "centre": board-mounted in mid-channel (air on both sides)
+    pad_mm: float = 0.0          # insulation pad between heater and skin-side wall ("skin" only)
+    k_pad: float = 0.03          # polymer foam / aerogel-blanket class
+    spreader_mm: float = 0.0     # aluminium spreader lining the inside of the outer wall (full
+                                 # length), bonded to the heater: meshed as part of the heater
+                                 # solid (same k), heat generated only in the heater block
     refine: float = 1.0          # multiplies every cell count (mesh study)
     nIter: int = 3000
     nProcs: int = 2
@@ -108,11 +114,7 @@ class DeviceParams:
             c, g = base_tissue[name]
             ycells.append(n(c))
             ygrad.append(g)
-        if self.heater_side == "skin":
-            chan = ((t + self.hb_mm, self.hb_mm / 0.1), (t + H, (H - self.hb_mm) / 0.125))
-        else:
-            chan = ((t + H - self.hb_mm, (H - self.hb_mm) / 0.125), (t + H, self.hb_mm / 0.1))
-        for top, c in ((t, 4), *chan, (2 * t + H, 4)):
+        for top, c in self._channel_bands():
             ylines.append(top)
             ycells.append(n(c))
             ygrad.append(1)
@@ -122,6 +124,8 @@ class DeviceParams:
         def centre(ax, i):
             return 0.5 * (ax.lines[i] + ax.lines[i + 1])
 
+        segs = self._channel_segments()
+
         def zone(i, j, k):
             xc, yc, zc = centre(x, i), centre(y, j), centre(z, k)
             if yc < 0:
@@ -130,9 +134,12 @@ class DeviceParams:
                 return None
             if yc < t or yc > t + H or zc > self.Wc_mm / 2:
                 return "housing"
-            in_band = (yc < t + self.hb_mm) if self.heater_side == "skin" else (yc > t + H - self.hb_mm)
-            if self.Lup_mm < xc < self.Lup_mm + self.Lb_mm and zc < self.Wb_mm / 2 and in_band:
-                return "heater"
+            kind = next(kd for lo, hi, kd, _ in segs if lo < yc < hi)
+            if kind == "spreader":
+                return "heater"         # one conducting solid with the heater (see spreader_mm)
+            under = self.Lup_mm < xc < self.Lup_mm + self.Lb_mm and zc < self.Wb_mm / 2
+            if kind in ("heater", "pad") and under:
+                return kind
             return "air"
 
         def classify(i, j, k, d):
@@ -144,7 +151,7 @@ class DeviceParams:
                     return "inlet", "patch"
                 if d == "+x":
                     return "outlet", "patch"
-            if zn == "housing":
+            if zn in ("housing", "heater"):     # heater: only the spreader ends at the vents
                 return "housingOuter", "wall"
             if zn in tissue_names:
                 if d == "-y" and j == 0:
@@ -156,9 +163,51 @@ class DeviceParams:
 
         return Lattice(x, y, z, zone, classify)
 
+    # ------------------------------------------------------------- channel stack
+    def _channel_segments(self):
+        """(y_lo, y_hi, kind, base cell count) bands inside the housing cavity, bottom-up."""
+        t, H, hb, pad, s = self.t_mm, self.H_mm, self.hb_mm, self.pad_mm, self.spreader_mm
+        side = self.heater_side
+        if pad and side != "skin":
+            raise ValueError("an insulation pad is only modelled under a skin-side heater")
+        top = t + H - s                      # top of the air cavity (below any spreader)
+        if side == "skin":
+            b = [(t, t + pad, "pad", max(3.0, pad / 0.1))] if pad else []
+            b += [(t + pad, t + pad + hb, "heater", hb / 0.1),
+                  (t + pad + hb, top, "air", (top - t - pad - hb) / 0.125)]
+        elif side == "outer":
+            b = [(t, top - hb, "air", (top - hb - t) / 0.125), (top - hb, top, "heater", hb / 0.1)]
+        elif side == "centre":
+            gap = (top - t - hb) / 2
+            b = [(t, t + gap, "air", gap / 0.125), (t + gap, t + gap + hb, "heater", hb / 0.1),
+                 (t + gap + hb, top, "air", gap / 0.125)]
+        else:
+            raise ValueError(side)
+        if s:
+            b.append((top, t + H, "spreader", max(3.0, s / 0.1)))
+        if min(hi - lo for lo, hi, *_ in b) <= 0:
+            raise ValueError("channel stack does not fit in the gap")
+        return b
+
+    def _channel_bands(self):
+        t, H = self.t_mm, self.H_mm
+        return [(t, 4)] + [(hi, c) for lo, hi, kd, c in self._channel_segments()] + [(2 * t + H, 4)]
+
+    @property
+    def spreader_mass_g(self) -> float:
+        """Full-device spreader mass (2700 kg/m3 aluminium)."""
+        return 2700.0 * self.spreader_mm * self.L_mm * self.Wc_mm * 1e-9 * 1e3 if self.spreader_mm else 0.0
+
+    def heater_box_m(self):
+        """Bounding box of the heat-generating block [m] (half model, z >= 0)."""
+        lo, hi, *_ = next(sg for sg in self._channel_segments() if sg[2] == "heater")
+        return ((self.Lup_mm * 1e-3, lo * 1e-3, -1e-3),
+                ((self.Lup_mm + self.Lb_mm) * 1e-3, hi * 1e-3, self.Wb_mm / 2 * 1e-3))
+
     def regions(self):
-        solids = ["heater", "housing"] + [tl[0] for tl in TISSUE]
-        return ["air"], solids
+        solids = ["heater", "housing"]
+        solids += ["pad"] if self.pad_mm else []
+        return ["air"], solids + [tl[0] for tl in TISSUE]
 
 
 # --------------------------------------------------------------------------- #
@@ -269,6 +318,36 @@ def build_device(case_dir: Path, p: DeviceParams) -> Path:
     # solids other than the heater (heater comes from templates/common)
     _w(c / "constant" / "housing" / "thermophysicalProperties", "dictionary",
        "thermophysicalProperties", solid_thermo(HOUSING["k"], HOUSING["rho"], HOUSING["cp"]))
+    if p.pad_mm:
+        _w(c / "constant" / "pad" / "thermophysicalProperties", "dictionary",
+           "thermophysicalProperties", solid_thermo(p.k_pad, 100.0, 1300.0))
+    if p.spreader_mm:
+        # heat source only in the heater block, not in the bonded spreader
+        _w(c / "constant" / "heater" / "fvOptions", "dictionary", "fvOptions", f"""heatSource
+{{
+    type            scalarSemiImplicitSource;
+    active          true;
+    selectionMode   cellSet;
+    cellSet         heaterBlock;
+    volumeMode      specific;
+    injectionRateSuSp
+    {{
+        h           ({p.qvol:.10g} 0);
+    }}
+}}
+""")
+        b = p.heater_box_m()
+        _w(c / "system" / "heater" / "topoSetDict", "dictionary", "topoSetDict", f"""actions
+(
+    {{
+        name    heaterBlock;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        sourceInfo {{ box ({b[0][0]:.9g} {b[0][1]:.9g} {b[0][2]:.9g}) ({b[1][0]:.9g} {b[1][1]:.9g} {b[1][2]:.9g}); }}
+    }}
+);
+""")
     for name, th, k, rho, cp, w, qm in TISSUE:
         _w(c / "constant" / name / "thermophysicalProperties", "dictionary",
            "thermophysicalProperties", solid_thermo(k, rho, cp))
@@ -283,38 +362,37 @@ def build_device(case_dir: Path, p: DeviceParams) -> Path:
     dec = f"numberOfSubdomains {p.nProcs};\nmethod          simple;\nsimpleCoeffs    {{ n ({p.nProcs} 1 1); delta 0.001; }}\n"
     for r in [""] + fluids + solids:
         _w(c / "system" / r / "decomposeParDict", "dictionary", "decomposeParDict", dec)
-    write_fields(c, p)
-    (c / "Allrun").write_text(ALLRUN.format(np=p.nProcs))
+    write_fields(c, p, lat.adjacency())
+    if p.U_in == 0.0:
+        # fan off: still air, no buoyancy -> solve energy only (pure conduction in the air)
+        fv = c / "system" / "air" / "fvSolution"
+        fv.write_text(fv.read_text().replace("momentumPredictor   yes;",
+                                             "momentumPredictor   yes;\n    frozenFlow          yes;"))
+    allrun = ALLRUN.format(np=p.nProcs)
+    if p.spreader_mm:
+        allrun = allrun.replace("rm -rf 0 && cp -r 0.orig 0\n",
+                                "rm -rf 0 && cp -r 0.orig 0\ntopoSet -region heater > log.topoSet 2>&1\n")
+    (c / "Allrun").write_text(allrun)
     (c / "Allrun").chmod(0o755)
     (c / "params.json").write_text(json.dumps(asdict(p)))
     return c
 
 
-def _neighbours(region):
-    """Coupled-patch neighbours of each region in this assembly."""
-    tissue = [tl[0] for tl in TISSUE]
-    nb = {"air": ["heater", "housing"], "heater": ["air", "housing"],
-          "housing": ["air", "heater", "epidermis"]}
-    for i, t in enumerate(tissue):
-        nb[t] = ([tissue[i - 1]] if i > 0 else []) + ([tissue[i + 1]] if i + 1 < len(tissue) else [])
-    nb["epidermis"].append("housing")
-    return nb[region]
-
-
-def write_fields(c: Path, p: DeviceParams):
+def write_fields(c: Path, p: DeviceParams, adjacency):
     T0 = 305.0
     fluids, solids = p.regions()
     for reg in fluids + solids:
         km = "fluidThermo" if reg in fluids else "solidThermo"
         ents = []
-        for nb in _neighbours(reg):
+        nbs = sorted(next(iter(pr - {reg})) for pr in adjacency if reg in pr)
+        for nb in nbs:
             Rc = p.R_contact if {reg, nb} == {"housing", "epidermis"} else None
             ents.append(f"    {reg}_to_{nb}\n    {coupled_T(km, Rc)}")
         ents.append("    symmetry        { type symmetryPlane; }")
         if reg == "air":
             ents += ["    inlet           { type fixedValue; value uniform %g; }" % p.T_amb,
                      "    outlet          { type inletOutlet; inletValue uniform %g; value $internalField; }" % p.T_amb]
-        if reg == "housing":
+        if reg == "housing" or (reg == "heater" and p.spreader_mm):
             ents.append(f"    housingOuter\n    {ambient_T(p, p.eps_housing)}")
         if reg in [tl[0] for tl in TISSUE]:
             ents += [f"    skinExposed\n    {ambient_T(p, p.eps_skin)}",
@@ -395,9 +473,15 @@ def analyse_device(case_dir, p: DeviceParams, time=None) -> dict:
     i = int(np.argmax(Tskin))
     out["skin_hotspot_xz_mm"] = [float(Cskin[i, 0] * 1e3), float(Cskin[i, 2] * 1e3)]
     Tout_h = Tho.boundary["housingOuter"]
-    _, _, Ao, _ = _wall_flux(mh, Tho, "housingOuter", HOUSING["k"])
     out["T_housing_outer_max_C"] = float(Tout_h.max()) - 273.15
-    Qamb = ((p.h_amb * (Tout_h - p.T_amb) + p.eps_housing * SIGMA * (Tout_h**4 - p.T_amb**4)) * Ao).sum()
+    Qamb = 0.0
+    for reg in ("housing", "heater"):
+        mr, Tr = c.mesh(reg), c.field("T", reg, time)
+        if "housingOuter" not in mr.patches or mr.patches["housingOuter"]["nFaces"] == 0:
+            continue
+        To = Tr.boundary["housingOuter"]
+        Ao = np.linalg.norm(mr.patch_areas("housingOuter"), axis=1)
+        Qamb += ((p.h_amb * (To - p.T_amb) + p.eps_housing * SIGMA * (To**4 - p.T_amb**4)) * Ao).sum()
     # air side
     ma, Ta_, Ua, Pa = c.mesh("air"), c.field("T", "air", time), c.field("U", "air", time), c.field("p", "air", time)
 
@@ -412,13 +496,18 @@ def analyse_device(case_dir, p: DeviceParams, time=None) -> dict:
     A = np.linalg.norm(ma.patch_areas("inlet"), axis=1)
     Q_cond_in = (K_AIR * (Ta_.internal[ic] - Ta_.boundary["inlet"]) / d * A).sum()
     Qair = H_in + H_out + Q_cond_in
-    out["T_out_C"] = float((md_out * Ta_.boundary["outlet"]).sum() / md_out.sum()) - 273.15
+    out["T_out_C"] = (float((md_out * Ta_.boundary["outlet"]).sum() / md_out.sum()) - 273.15
+                      if abs(md_out.sum()) > 1e-15 else float("nan"))
     Ain, Aout = np.linalg.norm(ma.patch_areas("inlet"), axis=1), np.linalg.norm(ma.patch_areas("outlet"), axis=1)
     dp = (Pa.boundary["inlet"] * Ain).sum() / Ain.sum() - (Pa.boundary["outlet"] * Aout).sum() / Aout.sum()
     out["dp_Pa"] = float(dp)
     out["fan_mW"] = float(1e3 * dp * (-md_in.sum() / rho) * 2)
     # heat budget of the device (full device = 2 x half model)
-    Qgen = p.qvol * c.mesh("heater").V.sum()
+    mhe = c.mesh("heater")
+    (x0, y0, z0), (x1, y1, z1) = p.heater_box_m()
+    Ch = mhe.C
+    inb = ((Ch[:, 0] > x0) & (Ch[:, 0] < x1) & (Ch[:, 1] > y0) & (Ch[:, 1] < y1) & (Ch[:, 2] < z1))
+    Qgen = p.qvol * mhe.V[inb].sum()
     out["Q_gen_W"] = float(2 * Qgen)
     out["Q_to_air_W"] = float(2 * Qair)
     out["Q_to_ambient_W"] = float(2 * Qamb)
@@ -428,4 +517,41 @@ def analyse_device(case_dir, p: DeviceParams, time=None) -> dict:
     res = final_residuals(Path(case_dir) / "log.chtMultiRegionSimpleFoam")
     out["max_residual"] = max(res.values()) if res else float("nan")
     out["n_cells"] = int(sum(c.mesh(r).n_cells for r in sum(p.regions(), [])))
+    out["spreader_mass_g"] = p.spreader_mass_g
+    return out
+
+
+# --------------------------------------------------------------------------- limits
+def surface_temperatures(case_dir, time=None) -> dict:
+    """Face temperatures [K] on the two surfaces that carry a comfort/safety limit.
+
+    skin     : every skin surface face (under the device and exposed)
+    touch    : every outer housing face (what fingers touch when holding the arm)
+    component: every heater cell and face (battery / SoC temperature)
+    """
+    c = Case(case_dir)
+    Te = c.field("T", "epidermis", time)
+    Th = c.field("T", "housing", time)
+    Tc = c.field("T", "heater", time)
+    skin = np.concatenate([Te.boundary["epidermis_to_housing"], Te.boundary["skinExposed"]])
+    comp = np.concatenate([Tc.internal] + [Tc.boundary[k] for k in sorted(Tc.boundary)])
+    return dict(skin=skin, touch=Th.boundary["housingOuter"], component=comp)
+
+
+def max_power(case_idle, case_loaded, Q_ref, limits) -> dict:
+    """Largest heater power for which every surface stays below its limit.
+
+    Uses face-wise superposition T(x; Q) = T_idle(x) + Q r(x), exact for the linear
+    parts of the model (conduction, convection, Pennes); grey-body radiation makes it
+    approximate, so the result is checked by a CFD run at Q_max (see phase4 script).
+    """
+    a, b = surface_temperatures(case_idle), surface_temperatures(case_loaded)
+    out = {}
+    for key, lim in limits.items():
+        T0, r = a[key], (b[key] - a[key]) / Q_ref
+        with np.errstate(divide="ignore", invalid="ignore"):
+            q = np.where(r > 0, (lim + 273.15 - T0) / r, np.inf)
+        out[key] = float(max(q.min(), 0.0)) if np.all(T0 < lim + 273.15) else 0.0
+    out["Q_max"] = min(out[k] for k in limits)
+    out["binding"] = min(limits, key=lambda k: out[k])
     return out
