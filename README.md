@@ -6,11 +6,15 @@ An OpenFOAM conjugate heat-transfer (CHT) model of a heat source (standing in fo
 
 > **What channel gap and airflow keep the wearer's skin below the 43 °C comfort limit, and how confident can we be?**
 
-**Short answer (0.5 W, 25 °C room):** with the heater mounted on the skin-side wall, **no fan setting we tested is enough**.
+**Short answer (25 °C room):** fan speed was the wrong lever; **the architecture** is what matters.
 
-* **The 3D model with skin fails every fan setting tested.** It adds the plastic housing, the housing–skin contact and four layers of perfused tissue. The skin peaks at **47.6 °C** in the nominal design (3 mm gap, 1.5 m/s) and still reaches **45.0 °C** at 3 m/s.
-* **The 2D model's pick fails too.** The 2D surrogate study (Stage 3) recommended a 1.5 mm gap at 1.75 m/s. In 3D that design reaches **45.2 °C at the skin**, because air bypasses the heater and heat conducts straight through the wall into the skin.
-* **Heater placement fixes the skin.** Moving the heater to the outer wall brings the skin peak down to **34.6 °C**. The outer shell then reaches 56.6 °C, which turns it into a touch-temperature problem instead.
+* **The original layout fails at 0.5 W.** With the heater on the skin-side wall, no fan setting keeps the skin below 43 °C. The skin reaches 45–48 °C, and this layout can sustain only **0.35 W**. That includes the design the 2D surrogate study picked as "safe".
+* **The redesigned layout sustains 0.94 W.** Moving the heater to the outer wall and bonding it to a 0.5 mm aluminium spreader that lines that wall lets the arm dissipate **0.94 W** (2.7×). That takes 0.95 mW of ideal fan power and 1 g of aluminium, and it keeps:
+  * skin ≤ 37 °C;
+  * outer shell ≤ 48 °C;
+  * battery ≈ 49 °C.
+* **Even with the fan off, the redesign beats the original.**
+* **The new bottleneck is the outer shell's touch temperature.**
 
 The 2D stages remain a verified and validated foundation. See [Phase 2](docs/phase2.md) for why 2D and a chip-temperature criterion are not enough.
 
@@ -22,6 +26,7 @@ The 2D stages remain a verified and validated foundation. See [Phase 2](docs/pha
 | **Phase 1. Validation** ([details](validation/README.md)) | The separated flow behind the block is checked against a benchmark and against experiment, with ASME V&V 20 uncertainty accounting | Gartling benchmark within **0.2 %**; Armaly et al. experiment matched within u<sub>val</sub> for Re ≲ 500; above that, a **−7 % 2D model-form error**, which 3D runs attribute to sidewall effects |
 
 | **Phase 2. 3D device + skin** ([details](docs/phase2.md)) | 3D temple arm (7 regions): air, heater, housing, contact resistance, 4-layer Pennes bioheat tissue, and room convection plus radiation | Bioheat verified against a semi-analytic solution to **≤ 0.3 mK**; skin-peak GCI **±0.4 K**; energy closed to **0.2 %**; Stage 3's 2D pick reaches **45.2 °C at the skin** in 3D |
+| **Phase 4. Architecture redesign** ([details](docs/phase4.md)) | Six layouts screened by maximum sustainable power under skin, touch and battery limits, then a ParEGO multi-objective optimisation (power ↑, fan power ↓, spreader mass ↓) | Best layout **2.3×** the baseline; optimised designs **0.59 / 0.94 / 1.15 W** (quiet / balanced / max), each re-checked on the design mesh and run at its limit |
 ---
 
 ## Repository layout
@@ -49,9 +54,11 @@ scripts/
   stage3_design.py    run | fit | mc | all
   phase1_validation.py  gartling | armaly2d | armaly3d | report
   phase2_device.py    column | mesh | cases | report
+  phase4_architecture.py  screen | opt | verify | report
   ci_check.py         coarse smoke test used by GitHub Actions
 validation/           Phase 1 write-up and reference data with provenance
 docs/phase2.md        Phase 2 write-up
+docs/phase4.md        Phase 4 write-up
 results/              committed CSV / JSON / Markdown tables behind every number here
 docs/figures/         figures used in this README
 tests/                pytest unit tests (no OpenFOAM needed)
@@ -72,6 +79,7 @@ python scripts/stage3_design.py all         # ~35 min for 36 cases on 2 cores
 python scripts/stage3_design.py fit mc      # re-analyse the cached CFD in ~2 min
 python scripts/phase1_validation.py         # ~2.5 h on 2 cores (3D runs up to 641 k cells)
 python scripts/phase2_device.py             # ~1.2 h on 2 cores (3D device + skin, up to 430 k cells)
+python scripts/phase4_architecture.py screen opt verify report   # ~3 h on 2 cores
 ```
 
 Each case is self-contained, so you can also run it by hand: `cd runs/stage2/medium && ./Allrun`.
@@ -251,6 +259,27 @@ The model now includes the plastic housing, the housing–skin contact and four 
   * **Moving the heater to the outer wall fixes the skin but not the shell.** The skin peak drops to 34.6 °C, but the outer shell rises to 56.6 °C.
   * **Contact resistance matters little for the skin.** Across 0–5 × 10⁻³ m²K/W, the skin peak moves by only 1.6 K; the resistance mostly changes the housing temperature.
   * **Idle, the device cools the skin.** With the fan on and no power, the device draws 0.2 W from the skin.
+
+## Phase 4: Redesigning the architecture
+
+Each layout is scored by the **largest continuous power it can dissipate** while three limits hold:
+
+* skin ≤ 43 °C;
+* outer shell ≤ 48 °C (IEC 62368-1 touch limit);
+* heater/battery ≤ 60 °C.
+
+This score comes from an idle run and a loaded run superposed face by face. A run at that power confirms it for each chosen design. Full write-up: [**docs/phase4.md**](docs/phase4.md).
+
+<p align="center"><img src="docs/figures/phase4_screening.png" width="90%"></p>
+
+* **Screening.** Across six layouts, a heater on the outer wall bonded to a thin aluminium spreader lining that wall (A4) sustains **0.79 W** against the baseline's **0.35 W**. Insulating the heater from the skin, or mounting it mid-channel, helps less, because the limit simply moves to the battery temperature. A4 with the fan switched off still beats the fan-cooled baseline.
+* **ParEGO optimisation of A4.** A multi-objective Bayesian search (18 CFD designs over fan speed, gap and spreader thickness) gives three designs, each re-checked on the design mesh and run at its limit:
+  * quiet: **0.59 W** at 0.02 mW;
+  * balanced: **0.94 W** at 0.95 mW with 1 g of aluminium;
+  * max: **1.15 W** at 3.3 mW.
+* **The outer shell is now the limit.** Every optimised design is limited by its outer-shell touch temperature, which points to fins or a larger shell as the next step.
+
+<p align="center"><img src="docs/figures/phase4_pareto.png" width="70%"></p>
 
 ## Verification, validation and limitations
 
