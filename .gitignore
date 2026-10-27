@@ -5,3 +5,10 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .venv/
+
+# gputherm build outputs and benchmark results
+gputherm/bin/
+bench_results.csv
+bench_results.png
+*.nsys-rep
+*.ncu-rep

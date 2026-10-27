@@ -27,6 +27,7 @@ The 2D stages remain a verified and validated foundation. See [Phase 2](docs/pha
 
 | **Phase 2. 3D device + skin** ([details](docs/phase2.md)) | 3D temple arm (7 regions): air, heater, housing, contact resistance, 4-layer Pennes bioheat tissue, and room convection plus radiation | Bioheat verified against a semi-analytic solution to **≤ 0.3 mK**; skin-peak GCI **±0.4 K**; energy closed to **0.2 %**; Stage 3's 2D pick reaches **45.2 °C at the skin** in 3D |
 | **Phase 4. Architecture redesign** ([details](docs/phase4.md)) | Six layouts screened by maximum sustainable power under skin, touch and battery limits, then a ParEGO multi-objective optimisation (power ↑, fan power ↓, spreader mass ↓) | Best layout **2.3×** the baseline; optimised designs **0.59 / 0.94 / 1.15 W** (quiet / balanced / max), each re-checked on the design mesh and run at its limit |
+| **GPU solver (in progress)** ([details](gputherm/README.md)) | `gputherm`: C++/CUDA conduction + Pennes bioheat solver on the lattice grids, for full-physics GPU design sweeps | CPU reference verified against the semi-analytic bioheat solution to **0.006 mK**, observed order **2.00**; CUDA v0 compiled, cloud-GPU benchmark next |
 ---
 
 ## Repository layout
@@ -62,6 +63,7 @@ docs/phase4.md        Phase 4 write-up
 results/              committed CSV / JSON / Markdown tables behind every number here
 docs/figures/         figures used in this README
 tests/                pytest unit tests (no OpenFOAM needed)
+gputherm/             C++/CUDA conduction + bioheat solver, verification, benchmarks
 ```
 
 ## Quick start
