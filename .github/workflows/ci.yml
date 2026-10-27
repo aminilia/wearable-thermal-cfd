@@ -18,6 +18,20 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest -q
 
+  gputherm-cpu:
+    # Builds the C++ reference solver and verifies it against the semi-analytic
+    # bioheat solution (the CUDA build is verified in the Colab notebook: no GPU here).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: make -C gputherm cpu
+      - run: python gputherm/python/verify_column.py --backend cpu
+
   openfoam-smoke:
     # Runs the coarse Stage-1 channel and the coarse Stage-2 CHT case inside the
     # official openfoam.com image and checks them against the analytical values.
