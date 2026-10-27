@@ -97,3 +97,22 @@ def test_pad_only_under_skin_side_heater():
 def test_spreader_mass():
     p = device3d.DeviceParams(spreader_mm=0.3)
     assert math.isclose(p.spreader_mass_g, 2700 * 0.3e-3 * 60e-3 * 12e-3 * 1e3)
+
+
+def test_contact_layer_reproduces_R_plus_replaced_housing():
+    for R in (0.0, 1e-3, 5e-3):
+        k = device3d.contact_kappa(R)
+        d = device3d.CONTACT_MM * 1e-3
+        assert math.isclose(d / k, R + d / device3d.HOUSING["k"], rel_tol=1e-12)
+
+
+def test_device_lattice_has_contact_layer_under_whole_footprint():
+    p = device3d.DeviceParams()
+    lat = p.lattice()
+    assert math.isclose(lat.y.lines[lat.y.lines.index(0.0) + 1], device3d.CONTACT_MM)
+    j = lat.y.lines.index(0.0)                  # first band above the skin
+    zones = {lat.zone(i, j, k) for i in range(lat.x.n) for k in range(lat.z.n)}
+    assert zones == {"contact", None}           # contact everywhere the housing touches skin
+    pairs = {frozenset(pr) for pr in lat.adjacency()}
+    assert frozenset(("contact", "epidermis")) in pairs
+    assert frozenset(("housing", "epidermis")) not in pairs

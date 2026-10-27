@@ -10,7 +10,11 @@ Assembly (half-width, symmetry plane at z = 0; x streamwise, y outward from skin
        |                                                       core at 37 C (y = -depth)
 
 * Heater: aluminium block (battery/SoC + spreader) on the skin-side housing wall.
-* Housing <-> epidermis: thermal contact resistance R'' (thin layer in the coupled BC).
+* Housing <-> epidermis: thermal contact resistance R''. It is meshed as a thin solid
+  region ("contact", CONTACT_MM thick) carved from the skin side of the housing wall, with
+  a conductivity that gives exactly R'' plus the housing it replaces (see contact_kappa).
+  A meshed layer behaves the same in every OpenFOAM release; the coupled BC's
+  thicknessLayers/kappaLayers option does not (it was reworked after v1912).
 * Outer housing and exposed skin: natural convection h + grey-body radiation to ambient.
 * Tissue: 4 layers, Pennes source  w*rho_b*c_b*(T_a - T) + q_m  in perfused layers.
 
@@ -47,6 +51,13 @@ TISSUE = [
     ("epidermis", 0.4, 0.24, 1200.0, 3590.0, 0.0, 0.0),
 ]
 HOUSING = dict(k=0.20, rho=1050.0, cp=2100.0)        # polycarbonate-type plastic
+CONTACT_MM = 0.05     # thickness of the meshed housing-skin contact layer
+
+
+def contact_kappa(R_contact, t_mm=CONTACT_MM, k_host=HOUSING["k"]):
+    """Conductivity of the contact layer: its t_mm of housing plus R'' in series."""
+    d = t_mm * 1e-3
+    return d / (R_contact + d / k_host)
 
 
 @dataclass
@@ -132,6 +143,8 @@ class DeviceParams:
                 return tissue_names[j]
             if not (0 < xc < L and zc < self.Wc_mm / 2 + t):
                 return None
+            if yc < CONTACT_MM:
+                return "contact"            # skin-side face of the housing, carries R''
             if yc < t or yc > t + H or zc > self.Wc_mm / 2:
                 return "housing"
             kind = next(kd for lo, hi, kd, _ in segs if lo < yc < hi)
@@ -151,7 +164,7 @@ class DeviceParams:
                     return "inlet", "patch"
                 if d == "+x":
                     return "outlet", "patch"
-            if zn in ("housing", "heater"):     # heater: only the spreader ends at the vents
+            if zn in ("housing", "heater", "contact"):  # heater: only the spreader ends at the vents
                 return "housingOuter", "wall"
             if zn in tissue_names:
                 if d == "-y" and j == 0:
@@ -191,7 +204,7 @@ class DeviceParams:
 
     def _channel_bands(self):
         t, H = self.t_mm, self.H_mm
-        return [(t, 4)] + [(hi, c) for lo, hi, kd, c in self._channel_segments()] + [(2 * t + H, 4)]
+        return [(CONTACT_MM, 1), (t, 4)] + [(hi, c) for lo, hi, kd, c in self._channel_segments()] + [(2 * t + H, 4)]
 
     @property
     def spreader_mass_g(self) -> float:
@@ -205,7 +218,7 @@ class DeviceParams:
                 ((self.Lup_mm + self.Lb_mm) * 1e-3, hi * 1e-3, self.Wb_mm / 2 * 1e-3))
 
     def regions(self):
-        solids = ["heater", "housing"]
+        solids = ["heater", "housing", "contact"]
         solids += ["pad"] if self.pad_mm else []
         return ["air"], solids + [tl[0] for tl in TISSUE]
 
@@ -273,16 +286,12 @@ pennes
 """
 
 
-def coupled_T(kappa_method, R_contact=None):
-    layers = ""
-    if R_contact:
-        # thin layer of arbitrary thickness with kappa chosen to give R''
-        d = 1e-4
-        layers = f"\n        thicknessLayers ({d:g});\n        kappaLayers     ({d / R_contact:.6g});"
+def coupled_T(kappa_method):
+    """Perfect thermal coupling between two regions (contact resistance is meshed instead)."""
     return f"""{{
         type            compressible::turbulentTemperatureCoupledBaffleMixed;
         Tnbr            T;
-        kappaMethod     {kappa_method};{layers}
+        kappaMethod     {kappa_method};
         value           $internalField;
     }}"""
 
@@ -318,6 +327,9 @@ def build_device(case_dir: Path, p: DeviceParams) -> Path:
     # solids other than the heater (heater comes from templates/common)
     _w(c / "constant" / "housing" / "thermophysicalProperties", "dictionary",
        "thermophysicalProperties", solid_thermo(HOUSING["k"], HOUSING["rho"], HOUSING["cp"]))
+    _w(c / "constant" / "contact" / "thermophysicalProperties", "dictionary",
+       "thermophysicalProperties",
+       solid_thermo(contact_kappa(p.R_contact), HOUSING["rho"], HOUSING["cp"]))
     if p.pad_mm:
         _w(c / "constant" / "pad" / "thermophysicalProperties", "dictionary",
            "thermophysicalProperties", solid_thermo(p.k_pad, 100.0, 1300.0))
@@ -386,13 +398,12 @@ def write_fields(c: Path, p: DeviceParams, adjacency):
         ents = []
         nbs = sorted(next(iter(pr - {reg})) for pr in adjacency if reg in pr)
         for nb in nbs:
-            Rc = p.R_contact if {reg, nb} == {"housing", "epidermis"} else None
-            ents.append(f"    {reg}_to_{nb}\n    {coupled_T(km, Rc)}")
+            ents.append(f"    {reg}_to_{nb}\n    {coupled_T(km)}")
         ents.append("    symmetry        { type symmetryPlane; }")
         if reg == "air":
             ents += ["    inlet           { type fixedValue; value uniform %g; }" % p.T_amb,
                      "    outlet          { type inletOutlet; inletValue uniform %g; value $internalField; }" % p.T_amb]
-        if reg == "housing" or (reg == "heater" and p.spreader_mm):
+        if reg in ("housing", "contact") or (reg == "heater" and p.spreader_mm):
             ents.append(f"    housingOuter\n    {ambient_T(p, p.eps_housing)}")
         if reg in [tl[0] for tl in TISSUE]:
             ents += [f"    skinExposed\n    {ambient_T(p, p.eps_skin)}",
@@ -454,6 +465,16 @@ def _wall_flux(m, T, patch, k):
     return (q * A).sum(), Tf, A, Cf
 
 
+def _face_flux(m, T, patch, k):
+    """Per-face heat flux [W/m2] leaving the region through ``patch``."""
+    sl = m.patch_slice(patch)
+    Cf, Sf = m.face_geometry[0][sl], m.face_geometry[1][sl]
+    n = Sf / np.linalg.norm(Sf, axis=1)[:, None]
+    cells = m.owner[sl]
+    d = np.abs(np.einsum("ij,ij->i", Cf - m.C[cells], n))
+    return k * (T.internal[cells] - T.boundary[patch]) / d
+
+
 def analyse_device(case_dir, p: DeviceParams, time=None) -> dict:
     c = Case(case_dir)
     time = time or c.latest()
@@ -465,8 +486,13 @@ def analyse_device(case_dir, p: DeviceParams, time=None) -> dict:
     out["T_heater_max_C"] = float(max(Th.internal.max(), *[v.max() for v in Th.boundary.values() if len(v)])) - 273.15
     me, Te = c.mesh("epidermis"), c.field("T", "epidermis", time)
     mh, Tho = c.mesh("housing"), c.field("T", "housing", time)
-    Qskin_epi, Tskin, Askin, Cskin = _wall_flux(me, Te, "epidermis_to_housing", kt["epidermis"])
-    Qskin, Ttouch, _, _ = _wall_flux(mh, Tho, "housing_to_epidermis", HOUSING["k"])
+    mc, Tco = c.mesh("contact"), c.field("T", "contact", time)
+    Qskin_epi, Tskin, Askin, Cskin = _wall_flux(me, Te, "epidermis_to_contact", kt["epidermis"])
+    Qskin, Tcf, Acf, _ = _wall_flux(mc, Tco, "contact_to_epidermis", contact_kappa(p.R_contact))
+    # housing surface at the skin = skin-side face + the jump q R'' across the contact
+    qloc = np.zeros_like(Tcf) if p.R_contact == 0 else _face_flux(mc, Tco, "contact_to_epidermis",
+                                                                    contact_kappa(p.R_contact))
+    Ttouch = Tcf + qloc * p.R_contact
     out["T_skin_max_C"] = float(Tskin.max()) - 273.15
     out["T_skin_mean_C"] = float((Tskin * Askin).sum() / Askin.sum()) - 273.15
     out["T_touch_max_C"] = float(Ttouch.max()) - 273.15
@@ -475,7 +501,7 @@ def analyse_device(case_dir, p: DeviceParams, time=None) -> dict:
     Tout_h = Tho.boundary["housingOuter"]
     out["T_housing_outer_max_C"] = float(Tout_h.max()) - 273.15
     Qamb = 0.0
-    for reg in ("housing", "heater"):
+    for reg in ("housing", "heater", "contact"):
         mr, Tr = c.mesh(reg), c.field("T", reg, time)
         if "housingOuter" not in mr.patches or mr.patches["housingOuter"]["nFaces"] == 0:
             continue
@@ -533,9 +559,11 @@ def surface_temperatures(case_dir, time=None) -> dict:
     Te = c.field("T", "epidermis", time)
     Th = c.field("T", "housing", time)
     Tc = c.field("T", "heater", time)
-    skin = np.concatenate([Te.boundary["epidermis_to_housing"], Te.boundary["skinExposed"]])
+    Tk = c.field("T", "contact", time)
+    skin = np.concatenate([Te.boundary["epidermis_to_contact"], Te.boundary["skinExposed"]])
     comp = np.concatenate([Tc.internal] + [Tc.boundary[k] for k in sorted(Tc.boundary)])
-    return dict(skin=skin, touch=Th.boundary["housingOuter"], component=comp)
+    touch = np.concatenate([Th.boundary["housingOuter"], Tk.boundary.get("housingOuter", [])])
+    return dict(skin=skin, touch=touch, component=comp)
 
 
 def max_power(case_idle, case_loaded, Q_ref, limits) -> dict:

@@ -196,7 +196,7 @@ def step_report():
         T = c.field("T", "epidermis")
         cells = m.patch_cells("skinExposed")
         pts, vals = [], []
-        for patch in ("epidermis_to_housing", "skinExposed"):
+        for patch in ("epidermis_to_contact", "skinExposed"):
             Cf = m.patch_centres(patch)
             pts.append(Cf[:, [0, 2]] * 1e3)
             vals.append(T.boundary[patch] - 273.15)

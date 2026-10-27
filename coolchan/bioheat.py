@@ -23,8 +23,8 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
 
 from .case import TEMPLATES, _copy_render, AIR
-from .device3d import (BLOOD, HOUSING, SIGMA, TISSUE, _w, coupled_T, pennes_source,
-                       solid_thermo)
+from .device3d import (BLOOD, CONTACT_MM, HOUSING, SIGMA, TISSUE, _w, contact_kappa, coupled_T,
+                       pennes_source, solid_thermo)
 from .foamio import Case
 from .lattice import Axis, Lattice
 
@@ -102,9 +102,10 @@ def build_column(case_dir: Path, p: ColumnParams) -> Path:
         yc.append(n(base[name]))
     names = list(tissue)
     if p.kind == "device":
-        ylines.append(p.t_mm)
-        yc.append(n(10))
-        names.append("housing")
+        # the contact resistance is a meshed layer carved from the housing, as in device3d
+        ylines += [CONTACT_MM, p.t_mm]
+        yc += [n(2), n(10)]
+        names += ["contact", "housing"]
     lat = Lattice(Axis([0, 1], [1]), Axis(ylines, yc), Axis([0, 1], [1]),
                   zone=lambda i, j, k: names[j],
                   classify=lambda i, j, k, d: (("core", "wall") if d == "-y" else
@@ -126,17 +127,19 @@ def build_column(case_dir: Path, p: ColumnParams) -> Path:
     if p.kind == "device":
         _w(c / "constant" / "housing" / "thermophysicalProperties", "dictionary",
            "thermophysicalProperties", solid_thermo(HOUSING["k"], HOUSING["rho"], HOUSING["cp"]))
+        _w(c / "constant" / "contact" / "thermophysicalProperties", "dictionary",
+           "thermophysicalProperties",
+           solid_thermo(contact_kappa(p.R_contact, CONTACT_MM, HOUSING["k"]), HOUSING["rho"],
+                        HOUSING["cp"]))
     for nm in names:
         _copy_render(solid_sys, c / "system" / nm, toks)
     top = names[-1]
     for i, nm in enumerate(names):
         ents = ["    sides           { type empty; }"]
         if i > 0:
-            Rc = p.R_contact if {nm, names[i - 1]} == {"housing", "epidermis"} else None
-            ents.append(f"    {nm}_to_{names[i - 1]}\n    {coupled_T('solidThermo', Rc)}")
+            ents.append(f"    {nm}_to_{names[i - 1]}\n    {coupled_T('solidThermo')}")
         if i + 1 < len(names):
-            Rc = p.R_contact if {nm, names[i + 1]} == {"housing", "epidermis"} else None
-            ents.append(f"    {nm}_to_{names[i + 1]}\n    {coupled_T('solidThermo', Rc)}")
+            ents.append(f"    {nm}_to_{names[i + 1]}\n    {coupled_T('solidThermo')}")
         if i == 0:
             ents.append(f"    core            {{ type fixedValue; value uniform {p.T_core:g}; }}")
         if nm == top:
@@ -181,7 +184,11 @@ chtMultiRegionSimpleFoam               > log.chtMultiRegionSimpleFoam 2>&1
 
 
 def column_profile(case_dir: Path, p: ColumnParams):
-    """Cell-centre (y, T) through all regions, sorted by y [m, K]."""
+    """Cell-centre (y, T) through the tissue and housing, sorted by y [m, K].
+
+    The contact layer is left out: it lumps R'' and a sliver of housing into one
+    conductivity, so its interior temperature is not a point on the reference profile.
+    """
     c = Case(case_dir)
     names = [t[0] for t in TISSUE] + (["housing"] if p.kind == "device" else [])
     ys, Ts = [], []

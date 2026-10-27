@@ -32,7 +32,7 @@ It then asks the same design question again in 3D.
   | Fat | 0.6 | 0.19 | 1000 | 2500 | 0.00125 | 370 |
   | Inner tissue | 15 | 0.50 | 1000 | 4000 | 0.00125 | 370 |
 
-* **Housing–skin contact resistance.** R'' = 10⁻³ m²K/W, modelled as a thin layer inside the coupled boundary condition. **This value is assumed.** We found no open source that gives a value for plastic on skin, so the cases below bracket it from 0 (perfect contact) to 5 × 10⁻³, and Phase 5 will treat it as an uncertain input.
+* **Housing–skin contact resistance.** R'' = 10⁻³ m²K/W, modelled as a meshed 0.05 mm solid layer carved from the skin side of the housing wall, with a conductivity that reproduces R'' plus the housing it replaces. An earlier version put R'' inside the coupled boundary condition (`thicknessLayers`/`kappaLayers`); OpenFOAM reworked that option after v1912, and on v2412 it produced errors of 4.9 K (nominal R'') and 8.8 K (R'' = 5 × 10⁻³) in the 1D column check. The meshed layer gives the same answer on both releases. **This value is assumed.** We found no open source that gives a value for plastic on skin, so the cases below bracket it from 0 (perfect contact) to 5 × 10⁻³, and Phase 5 will treat it as an uncertain input.
 * **Room side.** Room air at 25 °C with natural convection h = 5 W/m²K, matching the source above. Radiation is modelled as a grey body, via the `emissivity` option of `externalWallHeatFluxTemperature`.
 
 ## Verification
@@ -60,10 +60,10 @@ The error falls by 3–4× per mesh doubling, which is close to second order, an
 
 | Output | coarse | medium | fine | Observed p | Richardson extrap. | GCI<sub>medium</sub> |
 |---|---|---|---|---|---|---|
-| Skin max [°C] | 47.675 | 47.569 | 47.490 | 0.97 | 47.243 | 1.81 % |
-| Heater max [°C] | 53.047 | 52.880 | 52.752 | 0.90 | 52.313 | 2.54 % |
-| Housing touch max [°C] | 48.550 | 48.435 | 48.348 | 0.93 | 48.060 | 2.00 % |
-| Heat into skin [W] | 0.091 | 0.091 | 0.091 | 0.64 | 0.090 | 1.28 % |
+| Skin max [°C] | 47.698 | 47.593 | 47.514 | 0.96 | 47.264 | 1.82 % |
+| Heater max [°C] | 53.069 | 52.903 | 52.776 | 0.88 | 52.331 | 2.57 % |
+| Housing touch max [°C] | 48.575 | 48.460 | 48.373 | 0.92 | 48.081 | 2.02 % |
+| Heat into skin [W] | 0.091 | 0.091 | 0.091 | 0.54 | 0.090 | 1.64 % |
 | Δp [Pa] | 5.716 | 5.793 | 5.849 | 1.09 | 6.004 | 4.54 % |
 
 * **Temperatures converge at about first order.** The likely cause is the heater's sharp edges and the graded outer blocks. The GCI is therefore larger than in Stages 1–2, but still small: about **±0.4 K on the peak skin temperature** of the design mesh (1.8 % of the 22.6 K rise).
@@ -75,13 +75,13 @@ The error falls by 3–4× per mesh doubling, which is close to second order, an
 
 | Case | Skin max [°C] | Skin mean under device [°C] | Housing touch max [°C] | Heater max [°C] | Heat to air / skin / room [W] | Fan [mW] |
 |---|---|---|---|---|---|---|
-| Nominal (1.5 m/s, 3 mm gap) | **47.6** ⚠ | 38.4 | 48.4 | 52.9 | 0.358 / 0.091 / 0.051 | 0.31 |
+| Nominal (1.5 m/s, 3 mm gap) | **47.6** ⚠ | 38.4 | 48.5 | 52.9 | 0.358 / 0.091 / 0.050 | 0.31 |
 | Worn, idle (Q = 0) | **33.9** | 33.0 | 33.8 | 31.0 | 0.162 / -0.196 / 0.034 | 0.31 |
-| Stage-3 pick (1.75 m/s, 1.5 mm) | **45.2** ⚠ | 37.8 | 45.9 | 49.6 | 0.341 / 0.059 / 0.099 | 1.21 |
+| Stage-3 pick (1.75 m/s, 1.5 mm) | **45.2** ⚠ | 37.8 | 45.9 | 49.7 | 0.341 / 0.059 / 0.099 | 1.21 |
 | Heater on outer wall | **34.6** | 33.4 | 34.5 | 58.4 | 0.498 / -0.170 / 0.171 | 0.31 |
 | Perfect skin contact | **47.9** ⚠ | 38.4 | 47.9 | 52.5 | 0.356 / 0.092 / 0.051 | 0.31 |
-| Poor skin contact (5e-3) | **46.3** ⚠ | 38.2 | 50.2 | 54.2 | 0.365 / 0.087 / 0.048 | 0.31 |
-| Fan 3 m/s | **45.0** ⚠ | 37.2 | 45.7 | 49.2 | 0.432 / 0.027 / 0.040 | 1.62 |
+| Poor skin contact (5e-3) | **46.4** ⚠ | 38.2 | 50.2 | 54.2 | 0.365 / 0.087 / 0.048 | 0.31 |
+| Fan 3 m/s | **45.0** ⚠ | 37.2 | 45.7 | 49.3 | 0.432 / 0.027 / 0.040 | 1.62 |
 
 ![skin map](figures/phase2_skin_map.png)
 
@@ -95,7 +95,7 @@ The error falls by 3–4× per mesh doubling, which is close to second order, an
    * **The skin is warm.** It sits at about 34 °C, not at the 25 °C ambient that the 2D walls implicitly assumed.
 2. **With the heater on the skin side, the fan cannot fix it.** Doubling the fan speed to 3 m/s moves more heat into the air (0.43 W), yet the skin still peaks at 45.0 °C. The hot spot sits right under the heater, and it is set by conduction through the wall into the skin. Airflow over the heater's far side barely touches that path.
 3. **Where the heater sits matters more than any fan setting.** Mounting it on the outer wall drops the skin peak to **34.6 °C**, within 1 K of wearing the device idle. The cost moves elsewhere: the outer housing reaches **56.6 °C**. That is above the 48 °C IEC 62368-1 limit for contact lasting 1 minute to 8 hours, as summarised in [Electronics Cooling (2025)](https://www.electronics-cooling.com/2025/07/thermal-design-for-externally-worn-wearable-electronics/), so it becomes a finger-touch problem instead. This trade-off is what Phase 4 (architecture and optimisation) should explore, for example with a heat spreader or insulation between heater and skin.
-4. **Contact resistance moves the temperature drop more than it moves the skin peak.** From perfect contact to R'' = 5 × 10⁻³ m²K/W, the skin peak changes by only 1.6 K (47.9 → 46.3 °C). The housing surface rises by 2.3 K. The assumed value is therefore not the dominant uncertainty for skin temperature.
+4. **Contact resistance moves the temperature drop more than it moves the skin peak.** From perfect contact to R'' = 5 × 10⁻³ m²K/W, the skin peak changes by only 1.6 K (47.9 → 46.4 °C). The housing surface rises by 2.3 K. The assumed value is therefore not the dominant uncertainty for skin temperature.
 5. **A worn, idle device cools the skin.** With the fan running and no power, the skin loses 0.2 W into the device and sits at 33.9 °C. Under load, only about 18 % of the heat enters the skin, but it is concentrated under the heater.
 6. **The 2D chip criterion is not conservative.** For the same nominal design, the 3D heater runs 4.0 K hotter than the 2D Stage 2 model predicted (52.9 vs 48.9 °C). The skin, which is what the limit actually applies to, sits 4.6 K above 43 °C.
 
