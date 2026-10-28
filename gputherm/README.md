@@ -52,7 +52,7 @@ python python/bench.py --sizes 32 64 128          # N^3 device-on-skin block
 ./bin/gputherm_cpu case.spec --out T.bin           # any spec file (format in problem.hpp)
 ```
 
-No local GPU is needed. Develop on a laptop, then run `notebooks/colab_gputherm.ipynb` on a free Colab or Kaggle GPU: it builds, verifies, benchmarks and profiles.
+If no local GPU available, then, develop on a laptop, then run `notebooks/colab_gputherm.ipynb` on a free Colab or Kaggle GPU: it builds, verifies, benchmarks and profiles.
 
 ## Layout
 
