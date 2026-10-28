@@ -22,7 +22,24 @@ $$-\nabla\cdot(k\nabla T) + a\,T = s,\qquad a = w\rho_b c_b,\quad s = a\,T_a + q
 | bare skin (convection + radiation) | 89 / 178 / 356 | 0.088 / 0.022 / **0.0055 mK** | 0.0054 mK | **2.00** |
 | device (housing, contact resistance, flux) | 99 / 198 / 396 | 0.198 / 0.050 / **0.0124 mK** | 0.0124 mK | **2.00** |
 
-The column extruded to 3 × 3 cells with adiabatic sides reproduces the 1D answer to within 10⁻⁵ mK, which checks the x/y stencil. These are CPU numbers. The CUDA build must reproduce them; the Colab notebook runs that check.
+The column extruded to 3 × 3 cells with adiabatic sides reproduces the 1D answer to within 10⁻⁵ mK, which checks the x/y stencil. The CUDA solver, run on a Colab GPU, reproduces the CPU errors digit for digit on all three grids for both columns (its 3 × 3 extrusion agrees with 1D to 7 × 10⁻⁶ mK), so the GPU port solves the same problem to the same accuracy.
+
+## Results: CUDA v0 vs the OpenMP CPU reference
+
+Same N³ device-on-skin problem and the same Jacobi-PCG, solved to a relative residual of 10⁻¹⁰, on a Google Colab T4 GPU and the Colab host CPU (OpenMP on all vCPUs). Raw numbers are in `results/bench_v0_colab.csv`.
+
+| N | Cells | CPU solve [s] | GPU solve [s] | Speedup | GPU eff. bandwidth [GB/s] | \|T<sub>max</sub> diff\| [K] |
+|---|---|---|---|---|---|---|
+| 32 | 33 k | 0.199 | 0.045 | **4.5×** | 77 | 3 × 10⁻⁹ |
+| 64 | 262 k | 2.93 | 0.299 | **9.8×** | 184 | 1 × 10⁻⁸ |
+| 96 | 885 k | 16.1 | 1.23 | **13.1×** | 224 | 1 × 10⁻⁹ |
+| 128 | 2.1 M | 59.5 | 3.53 | **16.9×** | 245 | 3 × 10⁻⁹ |
+| 160 | 4.1 M | 143.8 | 8.35 | **17.2×** | 250 | 4 × 10⁻⁸ |
+
+* **Correct:** CPU and GPU temperatures agree to 4 × 10⁻⁸ K or better at every size, and the CG iteration counts differ by at most 13 (reduction order changes rounding).
+* **Memory-bound, as expected:** the GPU speedup grows with problem size as the launch overhead is amortised, and it levels off at about 250 GB/s. That is roughly 78 % of the T4's 320 GB/s peak, measured against a minimum-traffic model of 24 doubles per cell per iteration. It is an effective figure, not a profiler counter; Nsight Compute has not been run yet.
+* **The CPU baseline is modest:** it reaches only 14–19 GB/s on the Colab host, so the speedups above are against a small shared CPU, not a tuned many-core node. Read them as "v0 vs this CPU", not as a general GPU advantage.
+* **Headroom:** v0 still does three host round-trips per iteration and runs everything in FP64, which the T4 executes at 1/32 of its FP32 rate. Those are the first two roadmap items.
 
 ## Build and run
 
